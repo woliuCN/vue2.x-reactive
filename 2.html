@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    
+</body>
+<script>
+    const arr = [1, 2, 3, 4];
+    arr.forEach((item, index) => {
+        Object.defineProperty(arr, index, {
+            get: function () {
+                console.log(item, index);
+                return item
+            },
+            set: function (val) {
+                console.log('set', val);
+                item = val;
+            }
+        })
+    })
+    arr[2] = 5;
+    arr.push(6);
+    // 不被允许的
+    // Object.defineProperty(arr, 'length', {
+    //     writable: true, 
+    //     enumerable: true,  // 不可以被遍历
+    //     configurable: true // 属性不可被删除,不可更改
+    // })
+    // 获取属性的描述对象
+    console.log(Object.getOwnPropertyDescriptor(arr, 'length'));
+    /* 
+    {   
+        value: 5, 
+        writable: true, 
+        enumerable: false,  // 不可以被遍历
+        configurable: false // 属性不可被删除,不可更改
+    }
+    */
+</script>
+</html>

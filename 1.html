@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="./vue.js"></script>
+    <style>
+        .item:nth-last-of-type(2){
+            background: red;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+
+    </div>
+    <div>
+        <!-- <ul>
+            <li class="item3"></li>
+            <li class="item"></li>
+            <li class="item"></li>
+            <li class="item2"></li>
+            <div>123</div>  
+        </ul> -->
+        <!-- <ul>
+            <li class="item"></li>
+            <li class="item"></li>
+            <li class="item2"></li>  
+        </ul> -->
+        <!-- <div>
+            <img src="https://ss1.bdstatic.com/70cFvXSh_Q1YnxGkpoWK1HF6hhy/it/u=3540513748,1614366637&fm=11&gp=0.jpg">
+        </div>
+        <div>
+            12312313414125151
+            14214214214
+        </div> -->
+    </div>
+</body>
+<script>
+    const vm = new Vue({
+        data() {
+            return {
+                name: 'cn',
+                age: 24,
+                wife: {
+                    name: 'csf',
+                    age: 23
+                }
+            }
+        },
+        computed: {
+            husband() {
+                return this.name + this.wife.name
+            }
+        },
+        watch: {
+            wife: {
+                handler(val, oldVal) {
+                    console.log('watch--->',val.name, oldVal.name)
+                },
+                deep: true,
+                immediate: true
+            }
+        },
+        render() {
+            return `
+                <h3>normal key</h3>
+                <p>${this.name}</p>
+                <h3>nested key</h3>
+                <p>${this.age}</p>
+                <p>${JSON.stringify(this.wife)}</p>
+                <p>${this.husband}</p>
+            `;
+        }
+    }).$mount(null, document.getElementById('root'))
+    
+
+</script>
+</html>
