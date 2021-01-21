@@ -40,7 +40,9 @@ function mountComponent(vm, el, hydrating) {
     const _updateComponent = function (vm) {
         vm._update(vm._render(), hydrating)
     }
-
+    // 没错就是在这里，_updateComponent就是我们的更新视图的方法
+    // 因为这里因为没设置lazy，所以实例化watcher的时候，会直接调用
+    // _updateComponent -> _render -> 渲染页面 
     new Watcher(vm, _updateComponent, noop, {}, true)
     return vm
 }
@@ -155,11 +157,12 @@ function createComputedGetter(key) {
     return function computedGetter() {
         const watcher = this._computedWatchers && this._computedWatchers[key]
         if (watcher) {
-            // 这里一开始new的时候dirty是为true的，原因是computed是依赖data这些双向绑定的值的
-            // 一开始没页面render渲染的时候computed值的时候dirty是true所以是undefined
-            // 没必要一开始就算出其值(浪费,后面如果在渲染之前重新赋值了就白瞎了)
-            // 并且进行重新获取值的时候，会只调用一次data的值，进而触发data的key依赖收集当前的computedWatcher
+            // 这里一开始new的时候 dirty 是为true的
+            // 只要不取值，第一次，computed 值因为 dirty 是true所以是 undefined
+            // 没必要一开始就算出其值(浪费)，只有取值了才会调用 evaluate 重新计算值。
             if (watcher.dirty) {
+                // 调用evaluate计算值，计算完后会置为false
+                // 除非依赖的数据发生改变，会将 dirty 置为true 否则都无需取计算
                 watcher.evaluate()
             }
             // 这里是依赖收集暂时不知道作用是什么
@@ -306,8 +309,8 @@ class Observer {
 
         // 这里的def代理的__ob__很重要，后面数组就会用到这上面代理的observer对象
         def(value, '__ob__', this)
-        // 如果值是数组的话需要额外处理，因为object.defineProperty 无法监听数组的length值,是无法更改的
-        // 这也是为什么尤大不对数组进行处理的原因，而是通过$set与代理方法来实现双向绑定
+        // 如果值是数组的话需要额外处理，因为object.defineProperty 无法监听数组的任何改变数组长度的操作，以及原型上的方法。
+        // 这也是为什么尤大不对数组进行处理的原因，而是通过$set与代理变异方法来实现
         if (Array.isArray(value)) {
             // 代理数组的变异方法，重新赋值原型
             value.__proto__ = arrayMethods
@@ -367,7 +370,6 @@ function defineReactive(obj, key, val) {
                 dep.depend()
                 // 如果val是个对象或者是个数组的时候，ob是个observe对象
                 // 如果是数组的话，通过ob.dep.depend来进行数组方法的依赖收集
-                // 但是是个对象的时候暂时不知道为什么需要收集
                 if (ob) {
                     ob.dep.depend()
                     if (Array.isArray(value)) {
@@ -389,8 +391,9 @@ function defineReactive(obj, key, val) {
             } else {
                 val = newVal
             }
-            // 新数据递归进行依赖收集
+            // 新数据递归进行响应式处理
             ob = observe(newVal)
+            // 通知数据更新
             dep.notify()
         }
     })
@@ -428,7 +431,7 @@ function isObject(obj) {
     return obj !== null && typeof obj === 'object'
 }
 
-// 属性代理，这样才能直接访问this.xxx 而不是this._data.xxx
+// 属性代理
 function def(obj, key, val, enumerable) {
     Object.defineProperty(obj, key, {
         value: val,
@@ -499,6 +502,9 @@ class Watcher {
     getter
     cb
     value
+    // vm 为vue实例对象
+    // expOrFn为更新的方法, renderWatcher中为我们的updateComponent更新视图, userWatcher/computedWatcher为重新求值方法
+    // cb 为回调，主要在userWatcher中及我们的watch属性才需要用到
     constructor(vm, expOrFn, cb, options, isRenderWatcher) {
         this.vm = vm
         if (isRenderWatcher) {
@@ -513,7 +519,7 @@ class Watcher {
         this.newDeps = []
         this.depIds = new Set()
         this.newDepIds = new Set()
-        // options
+        // options　lazy是computedWatcher的参数，　user则是userWatcher的参数
         if (options) {
             this.deep = !!options.deep
             this.user = !!options.user
@@ -526,11 +532,12 @@ class Watcher {
         if (typeof expOrFn === 'function') {
             this.getter = expOrFn
         } else {
-            // 如果是watch的那种"data.xxxx"形式
+            // 如果是watch
             this.getter = parsePath(expOrFn)
         }
 
-        // new watcher的时候，get方法会调用
+        // renderWatcher　userWatcher new watcher的时候，get方法会调用
+        // 如果是computeWatcher　this.lazy为true, get方法不会被调用 
         this.value = this.lazy ?
             undefined :
             this.get()
@@ -547,6 +554,8 @@ class Watcher {
 
         } finally {
             // 这个是为watch的deep服务的
+            // 如果deep的话需要递归遍历其watch的data属性的其下的所有子属性
+            // 将当前的userWatcher加入到它们的dep中，这样才能深度改变
             if (this.deep) {
                 traverse(value)
             }
@@ -577,9 +586,9 @@ class Watcher {
         }
     }
     update() {
-        // 对于computed数据来说,第一次render渲染会调用evaluate方法，dirty会被置为false，
-        // 当computed 依赖的data的值被改变的时候，会调用到computedWatcher，但是因为初始化computedWatcher lazy是为true，且一直是true
-        // 所以 computedWatcher 不会被执行run ,因为data改变的时候会触发renderWatcher, 进而会获取computed 的值
+        // 对于computed数据来说，初始化 computedWatcher lazy是为true，且一直是true
+        // 所以 computedWatcher 不会执行run ,而是依靠其计算方法中的data的属性值改变的时触发其computedWatcher，将dirty置为true。
+        // 在我们对计算属性进行取值操作的时候，会因为dirty为true，从而调用evaluate获得最新的值。(这是一个很巧妙的设计，等到用到的才会最终去计算取值)
         // 又会调用到evaluate 获取到正确的值
         if (this.lazy) {
             this.dirty = true
@@ -645,6 +654,8 @@ function queueWatcher(watcher) {
 }
 
 let index = 0
+// flushScheduleQueue函数的作用主要是执行更新的操作
+// 它会把queue中所有的watcher取出来并执行相应的更新     
 function flushSchedulerQueue() {
     flushing = true
     let watcher, id
@@ -668,6 +679,11 @@ function resetSchedulerState() {
     waiting = flushing = false
 }
 
+// 一般callback都是只有flushSchedulerQueue
+// 当我们自己定义了$nextTick的时候也会加入到这里
+const callbacks = []
+let pending = false
+
 function nextTick(cb, ctx) {
     callbacks.push(() => {
         if (cb) {
@@ -684,13 +700,12 @@ function nextTick(cb, ctx) {
     }
 }
 
+// 这里我们默认浏览器支持promise，其源码判断很多种情况
 const p = Promise.resolve()
 let timerFunc = () => {
     p.then(flushCallbacks)
 }
 
-const callbacks = []
-let pending = false
 
 function flushCallbacks() {
     pending = false
@@ -712,10 +727,11 @@ function hasOwn(obj, key) {
 
 function noop(a, b, c) {}
 
-// 解析watch 的  data.xxx.xxx的情况
+// 解析watch 的 a.b.c的情况
 function parsePath(path) {
     const segments = path.split('.');
     return function (obj) {
+    // 这里的obj会被赋予vm，所以返回的就是watch的data中key的值
       for (let i = 0; i < segments.length; i++) {
         if (!obj) { return }
         obj = obj[segments[i]];
